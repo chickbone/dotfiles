@@ -13,7 +13,6 @@ local opts = {
   tabstop = 2,
   softtabstop = 2,
   shiftwidth = 2,
-  matchpairs = "(:),「:」,『:』",
   helplang = "ja,en",
 
   number = true,
@@ -29,8 +28,8 @@ local opts = {
   completeopt = "menuone,noinsert,noselect",
 
   laststatus = 3,
-  pumblend = 15,
-  winblend = 15,
+  pumblend = 0,
+  winblend = 0,
 }
 
 -- Set options from table

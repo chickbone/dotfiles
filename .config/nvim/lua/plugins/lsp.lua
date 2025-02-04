@@ -68,6 +68,8 @@ return {
           vim.keymap.set("n", "gI", vim.lsp.buf.implementation, opts)
           vim.keymap.set("n", "<C-k>", vim.lsp.buf.signature_help, opts)
           vim.keymap.set("n", "<Leader>D", vim.lsp.buf.type_definition, opts)
+          vim.keymap.set("n", "<Leader>ca", vim.lsp.buf.code_action, opts)
+          vim.keymap.set("n", "<Leader>rn", vim.lsp.buf.rename, opts)
           vim.keymap.set('n', '<Leader>lf', function()
             vim.lsp.buf.format { async = true }
           end, opts)
@@ -80,29 +82,46 @@ return {
         end,
       })
 
-      local update_capabilities = function(capabilities)
-        local completionItem = capabilities.textDocument.completion.completionItem
-
-        completionItem.snippetSupport = true
-        completionItem.preselectSupport = true
-        completionItem.insertReplaceSupport = true
-        completionItem.labelDetailsSupport = true
-        completionItem.deprecatedSupport = true
-        completionItem.commitCharactersSupport = true
-        completionItem.tagSupport = { valueSet = { 1 } }
-        completionItem.resolveSupport =
-        { properties = { "documentation", "detail", "additionalTextEdits" } }
-
-        return capabilities
-      end
-
+      -- local update_capabilities = function(capabilities)
+      --   local completionItem = capabilities.textDocument.completion.completionItem
+      --
+      --   completionItem.snippetSupport = true
+      --   completionItem.preselectSupport = true
+      --   completionItem.insertReplaceSupport = true
+      --   completionItem.labelDetailsSupport = true
+      --   completionItem.deprecatedSupport = true
+      --   completionItem.commitCharactersSupport = true
+      --   completionItem.tagSupport = { valueSet = { 1 } }
+      --   completionItem.resolveSupport =
+      --   { properties = { "documentation", "detail", "additionalTextEdits" } }
+      --
+      --   return capabilities
+      -- end
+      require('lspconfig')['hls'].setup {
+        filetypes = { 'haskell', 'lhaskell', 'cabal' },
+      }
+      require("lspconfig")["typst"].setup {
+        settings = {
+          formatterMode = "typstyle",
+          exportPdf = "onSave",
+          semanticTokens = "disable"
+        }
+      }
       -- mason
+      require("mason").setup()
       local mason_lspconfig = require("mason-lspconfig")
       mason_lspconfig.setup_handlers({ function(server)
         local opts = {}
         -- (optional) Customize the options passed to the server
-        opts.capabilities = update_capabilities(vim.lsp.protocol.make_client_capabilities())
+        opts.capabilities = require('cmp_nvim_lsp').default_capabilities(
+          vim.lsp.protocol.make_client_capabilities()
+        )
 
+        local function detected_root_dir(root_dir)
+          return not (not (root_dir(vim.api.nvim_buf_get_name(0), vim.api.nvim_get_current_buf())))
+        end
+
+        -- specific settings
         if server.name == "jsonls" then
           opts.commands = {
             Format = {
@@ -111,10 +130,6 @@ return {
               end
             }
           }
-        end
-
-        local function detected_root_dir(root_dir)
-          return not (not (root_dir(vim.api.nvim_buf_get_name(0), vim.api.nvim_get_current_buf())))
         end
         if server.name == "tsserver" or server.name == "eslint" then
           local root_dir = nvim_lsp.util.root_pattern("package.json", "node_modules")
@@ -126,12 +141,12 @@ return {
           opts.autostart = detected_root_dir(root_dir)
           opts.init_options = { lint = true, unstable = true, }
         end
+
         nvim_lsp[server].setup(opts)
       end })
     end
   },
-  "jose-elias-alvarez/null-ls.nvim",
-  "jay-babu/mason-null-ls.nvim",
+  "nvimtools/none-ls.nvim",
   --[[ {
     "glepnir/lspsaga.nvim",
     event = "LspAttach",
@@ -161,23 +176,34 @@ return {
 
   {
     "folke/trouble.nvim",
-    cmd = { "TroubleToggle", "Trouble" },
+    cmd = { "Trouble" },
     opts = { use_diagnostic_signs = true },
     keys = {
-      { "<leader>xx", "<cmd>TroubleToggle document_diagnostics<cr>",  desc = "Document Diagnostics (Trouble)" },
-      { "<leader>xX", "<cmd>TroubleToggle workspace_diagnostics<cr>", desc = "Workspace Diagnostics (Trouble)" },
-      { "<leader>xL", "<cmd>TroubleToggle loclist<cr>",               desc = "Location List (Trouble)" },
-      { "<leader>xQ", "<cmd>TroubleToggle quickfix<cr>",              desc = "Quickfix List (Trouble)" },
+      {
+        "<leader>xx",
+        "<cmd>Trouble diagnostics toggle<cr>",
+        desc = "Diagnostics (Trouble)",
+      },
+      {
+        "<leader>xX",
+        "<cmd>Trouble diagnostics toggle filter.buf=0<cr>",
+        desc = "Buffer Diagnostics (Trouble)",
+      },
+      {
+        "<leader>cs",
+        "<cmd>Trouble symbols toggle focus=false<cr>",
+        desc = "Symbols (Trouble)",
+      },
+      {
+        "<leader>cl",
+        "<cmd>Trouble lsp toggle focus=false win.position=right<cr>",
+        desc = "LSP Definitions / references / ... (Trouble)",
+      },
       {
         "[q",
         function()
           if require("trouble").is_open() then
             require("trouble").previous({ skip_groups = true, jump = true })
-          else
-            local ok, err = pcall(vim.cmd.cprev)
-            if not ok then
-              vim.notify(err, vim.log.levels.ERROR)
-            end
           end
         end,
         desc = "Previous trouble/quickfix item",
@@ -187,11 +213,6 @@ return {
         function()
           if require("trouble").is_open() then
             require("trouble").next({ skip_groups = true, jump = true })
-          else
-            local ok, err = pcall(vim.cmd.cnext)
-            if not ok then
-              vim.notify(err, vim.log.levels.ERROR)
-            end
           end
         end,
         desc = "Next trouble/quickfix item",
@@ -264,10 +285,10 @@ return {
     "hrsh7th/nvim-cmp",
     event = { "InsertEnter", "CmdlineEnter" },
     dependencies = {
-      "hrsh7th/cmp-nvim-lsp",
-      "hrsh7th/cmp-buffer",
+      { 'hrsh7th/cmp-nvim-lsp',                event = 'InsertEnter' },
+      { 'hrsh7th/cmp-buffer',                  event = 'InsertEnter' },
       -- "ray-x/cmp-treesitter",
-      "hrsh7th/cmp-calc",
+      { 'hrsh7th/cmp-calc',                    event = 'InsertEnter' },
       { 'hrsh7th/cmp-path',                    event = 'InsertEnter' },
       { 'hrsh7th/cmp-cmdline',                 event = 'ModeChanged' },
       { 'hrsh7th/cmp-nvim-lsp-signature-help', event = 'InsertEnter' },
